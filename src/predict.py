@@ -1,43 +1,41 @@
 import torch
 
 from config import *
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import AutoTokenizer, BartForConditionalGeneration
 
 def predict_batch(model, inputs):
     model.eval()
     with torch.no_grad():
-        output = model(**inputs)
-    batch_results = torch.softmax(output.logits, dim=-1)
-    return batch_results[:, 1].tolist()
+        outputs = model.generate(**inputs)
+    return outputs
 
 def predict(text, model, tokenizer, device):
 
     inputs = tokenizer(
         text,
-        padding='max_length',
+        padding=True,
         truncation=True,
-        max_length=SEQ_LEN,
         return_tensors='pt',
+        return_token_type_ids=False,
     )
     inputs = {k:v.to(device) for k,v in inputs.items()}
 
     result = predict_batch(model, inputs)
 
-    return result[0]
+    return tokenizer.batch_decode(result, skip_special_tokens=True)[0].replace(' ', '')
 
 def run_predict():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    tokenizer = AutoTokenizer.from_pretrained(BERT_MODEL)
+    tokenizer = AutoTokenizer.from_pretrained(BART_MODEL)
     print('vocabulary load success!')
 
-    model = AutoModelForSequenceClassification.from_pretrained(BERT_MODEL).to(device)
+    model = BartForConditionalGeneration.from_pretrained(MODEL_DIR).to(device)
     print('model load success!')
 
-    print('Welcome to INTELEGER sentiment analysis model! print q or quit to exit...')
-    input_history = ''
+    print('Welcome to INTELEGER couplet generation model! print q or quit to exit...')
     while True:
-        user_input = input('> ')
-        if user_input.strip() in ['q', 'quit']:
+        user_input = input('>the upper couplet: ')
+        if user_input.strip().lower() in ['q', 'quit']:
             print('bye!')
             break
         elif user_input.strip() == '':
@@ -45,10 +43,7 @@ def run_predict():
             continue
 
         result = predict(user_input, model, tokenizer, device)
-        if result >= 0.5:
-            print(f'positive review: (confidence level: {result})')
-        else:
-            print(f'negative review: (confidence level: {1 - result})')
+        print(f'the next couplet: {result}')
 
 if __name__ == '__main__':
     run_predict()
