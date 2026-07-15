@@ -1,53 +1,52 @@
 import torch
-from torch import nn, optim
+from torch import optim
 from tqdm import tqdm
 
 from config import *
 from dataset import get_dataloader
-from transformers import AutoModelForSequenceClassification
+from transformers import BartForConditionalGeneration, AutoTokenizer
 
 from torch.utils.tensorboard import SummaryWriter
 import time
 
-def train_one_epoch(model, train_loader, optimizer, device):
+def train_one_step(model, inputs, optimizer, device):
     model.train()
-
-    total_loss = 0
-    for batch in tqdm(train_loader, desc='Training'):
-        inputs = {k:v.to(device) for k,v in batch.items()}
-        outputs = model(**inputs)
-        loss_value = outputs.loss
-        loss_value.backward()
-        optimizer.step()
-        optimizer.zero_grad()
-        total_loss += loss_value.item()
-
-    return total_loss / len(train_loader)
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    outputs = model(**inputs)
+    loss_value = outputs.loss
+    loss_value.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+    return loss_value.item()
 
 def train():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    train_loader = get_dataloader(train=True)
+    
+    model = BartForConditionalGeneration.from_pretrained(BART_MODEL).to(device)
+    tokenizer = AutoTokenizer.from_pretrained(BART_MODEL)
 
-    model = AutoModelForSequenceClassification.from_pretrained(BERT_MODEL).to(device)
-    loss = nn.BCEWithLogitsLoss()
+    dataloader = get_dataloader(tokenizer, model)
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
     writer = SummaryWriter(log_dir=LOG_DIR / time.strftime('%Y-%m-%d_%H-%M-%S'))
 
     min_loss = float('inf')
+    step = 1
     for epoch in range(EPOCHS):
         print('='*15, f'EPOCH {epoch+1}', '='*15)
-        this_loss = train_one_epoch(model, train_loader, optimizer, device)
-        print('the loss of this epoch is : ', this_loss)
 
-        writer.add_scalar('loss', this_loss, epoch + 1)
+        for inputs in tqdm(dataloader, desc='training: '):
+            this_loss = train_one_step(model, inputs, optimizer, device)
 
-        if this_loss < min_loss:
-            min_loss = this_loss
-            model.save_pretrained(MODEL_DIR)
-            print('The best model has been saved!')
-        else:
-            print('This model is not the best, and it has not been saved!')
+            if step % SAVE_STEPS == 0:
+                tqdm.write(f'[Epoch {epoch+1} | Step {step}] Loss {this_loss:.4f}')
+                writer.add_scalar('loss', this_loss, step)
+
+                if this_loss < min_loss:
+                    min_loss = this_loss
+                    model.save_pretrained(MODEL_DIR)
+                    tqdm.write('Model Saved successfully')
+            step += 1
     writer.close()
 
 if __name__ == '__main__':
