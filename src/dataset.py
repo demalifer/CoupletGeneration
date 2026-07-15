@@ -1,23 +1,27 @@
-import pandas as pd
-import torch
 from torch.utils.data import DataLoader
-
 from config import *
-
 from datasets import load_from_disk
+from transformers import AutoTokenizer, DataCollatorForSeq2Seq, BartForConditionalGeneration
 
-def get_dataloader(train=True):
-    path = str(PROCESSED_DATA_DIR / ('train' if train else 'test'))
-    dataset = load_from_disk(path)
+def get_dataloader(tokenizer, model):
+    dataset = load_from_disk(PROCESSED_DATA_DIR)
     dataset.set_format(type='torch')
-    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True)
+    collate_fn = DataCollatorForSeq2Seq(
+        tokenizer,
+        model,
+        padding=True,
+        return_tensors='pt'
+    )
+    dataloader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_fn)
     return dataloader
 
 if __name__ == '__main__':
-    train_dataloader = get_dataloader(train=True)
-    test_dataloader = get_dataloader(train=False)
+    tokenizer = AutoTokenizer.from_pretrained(BART_MODEL)
+    model = BartForConditionalGeneration.from_pretrained(BART_MODEL)
 
-    for batch in train_dataloader:
+    dataloader = get_dataloader(tokenizer, model)
+
+    for batch in dataloader:
         for key, value in batch.items():
-            print(key, '->', value.shape)
+            print(key, '->', value)
         break
