@@ -11,7 +11,7 @@ LOG_DIR = ROOT_DIR / "logs"
 #2. 文件
 RAW_IN_DATA_FILE = 'in.txt'
 RAW_OUT_DATA_FILE = 'out.txt'
-BERT_MODEL = 'fnlp/bart-base-chinese'
+BART_MODEL = 'fnlp/bart-base-chinese'
 
 #3. 超参数
 BATCH_SIZE = 64

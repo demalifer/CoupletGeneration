@@ -1,32 +1,35 @@
-from datasets import load_dataset, ClassLabel
+from datasets import load_dataset, Dataset
 from transformers import AutoTokenizer
 from config import *
 
 def preprocess():
     print('The preprocessing of data is starting...')
 
-    dataset = load_dataset('csv', data_files=str(RAW_DATA_DIR/RAW_DATA_FILE))['train']
+    with open(RAW_DATA_DIR/RAW_IN_DATA_FILE, 'r', encoding='utf-8') as f:
+        inputs = [line.strip().replace(' ', '') for line in f.readlines()]
 
-    dataset = dataset.remove_columns(['cat'])
-    dataset = dataset.filter(lambda x: x['review'] is not None)
-    
-    dataset = dataset.cast_column('label', ClassLabel(names=['n', 'p']))
-    dataset_dict = dataset.train_test_split(test_size=0.2, stratify_by_column='label')
+    with open(RAW_DATA_DIR/RAW_OUT_DATA_FILE, 'r', encoding='utf-8') as f:
+        targets = [line.strip().replace(' ', '') for line in f.readlines()]
 
-    tokenizer = AutoTokenizer.from_pretrained(PRE_TRAINED_DIR/BERT_MODEL)
+    dataset = Dataset.from_dict({
+        'inputs': inputs,
+        'targets': targets,
+    })
+
+    tokenizer = AutoTokenizer.from_pretrained(BART_MODEL)
 
     def batch_encode(example):
         inputs = tokenizer(
-            example['review'],
-            padding='max_length',
-            max_length=128,
-            truncation=True
+            text=example['inputs'],
+            text_target=example['targets'],
+            return_token_type_ids=False
         )
-        inputs['labels'] = example['label']
         return inputs
 
-    dataset_dict = dataset_dict.map(batch_encode, batched=True, remove_columns=['label', 'review'])
-    dataset_dict.save_to_disk(PROCESSED_DATA_DIR)
+    dataset = dataset.map(batch_encode, batched=True, remove_columns=['inputs', 'targets'])
+
+
+    dataset.save_to_disk(PROCESSED_DATA_DIR)
 
     print('The preprocessing of data is done.')
 
